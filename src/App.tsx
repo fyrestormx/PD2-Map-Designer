@@ -1,24 +1,23 @@
 import './App.css'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
-import { ComposerPage } from './pages/ComposerPage'
+import { AdvancedPage } from './pages/AdvancedPage'
+import { BuildPage } from './pages/BuildPage'
 import { ExportPage } from './pages/ExportPage'
-import { GeneratorPage } from './pages/GeneratorPage'
-import { ImportPage } from './pages/ImportPage'
-import { LibraryPage } from './pages/LibraryPage'
-import { ValidationPage } from './pages/ValidationPage'
+import { HomePage } from './pages/HomePage'
+import { ReviewPage } from './pages/ReviewPage'
+import { ThemePage } from './pages/ThemePage'
 
 function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<Navigate to="/import" replace />} />
-        <Route path="/import" element={<ImportPage />} />
-        <Route path="/library" element={<LibraryPage />} />
-        <Route path="/composer" element={<ComposerPage />} />
-        <Route path="/generator" element={<GeneratorPage />} />
-        <Route path="/validation" element={<ValidationPage />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/theme" element={<ThemePage />} />
+        <Route path="/build" element={<BuildPage />} />
+        <Route path="/review" element={<ReviewPage />} />
         <Route path="/export" element={<ExportPage />} />
+        <Route path="/advanced" element={<AdvancedPage />} />
       </Routes>
     </AppShell>
   )

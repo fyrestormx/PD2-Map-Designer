@@ -22,11 +22,11 @@ export function FileDropZone({
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  const directoryProps = directory
-    ? ({
+  const directoryProps: Record<string, string> = directory
+    ? {
         webkitdirectory: '',
         directory: '',
-      } as unknown as React.InputHTMLAttributes<HTMLInputElement>)
+      }
     : {}
 
   const handleFiles = (files: FileList | null) => {

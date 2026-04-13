@@ -1,19 +1,27 @@
 import { create } from 'zustand'
 import { buildExportBundle } from '../lib/exporter'
-import { generateLayoutCandidates } from '../lib/generator'
 import { loadWorkspace, saveWorkspace } from '../lib/persistence'
-import { createEmptyProject, createWarp, getRoomById, normalizeConnectorSides } from '../lib/project'
+import { createEmptyProject, createProjectFromSourceBundle, getRoomById, normalizeConnectorSides, normalizeProject } from '../lib/project'
 import { getDemoImportFiles } from '../lib/sampleData'
 import { buildWorkspaceFromLoadedFiles, loadFilesFromSelection } from '../lib/sourceImport'
 import { validateWorkspace } from '../lib/validation'
+import { draftPlacementsFromProject, projectForPd2Export } from '../lib/bindings'
+import {
+  STARTER_PIECE_TEMPLATES,
+  createDraftPiece,
+  findBestRotationForPlacement,
+  findPieceAt,
+  findPieceTemplate,
+  getAvailablePieceTemplates,
+  getThemePreset,
+} from '../lib/draft'
 import type {
   ConnectorSide,
+  DraftPiece,
   ExportBundle,
-  GeneratedLayoutCandidate,
   MapProject,
   PersistedWorkspace,
   SourceBundle,
-  WarpDefinition,
 } from '../types/map'
 
 type ImportStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -21,10 +29,6 @@ type ImportStatus = 'idle' | 'loading' | 'ready' | 'error'
 interface AppState {
   sourceBundle?: SourceBundle
   project: MapProject
-  generatorCandidates: GeneratedLayoutCandidate[]
-  activeCandidateIndex: number
-  selectedRoomTemplateId?: string
-  selectedPlacementId?: string
   exportBundle?: ExportBundle
   importStatus: ImportStatus
   importError?: string
@@ -35,35 +39,63 @@ interface AppState {
     x: number
     y: number
   }
+  selectedAdvancedRoomTemplateId?: string
   hydrateFromIndexedDb: () => Promise<void>
   importBrowserFiles: (files: File[]) => Promise<void>
   loadDemoProject: () => void
+  startQuickStart: () => void
   updateMeta: (patch: Partial<MapProject['meta']>) => void
+  selectTheme: (themeId: string) => void
+  selectPieceTemplate: (templateId?: string) => void
+  selectDraftPiece: (pieceId?: string) => void
+  placePiece: (x: number, y: number) => void
+  movePiece: (pieceId: string, x: number, y: number) => void
+  rotateDraftPiece: (pieceId: string) => void
+  duplicateDraftPiece: (pieceId: string) => void
+  deleteDraftPiece: (pieceId: string) => void
+  updateDraftPiece: (pieceId: string, patch: Partial<DraftPiece>) => void
+  updateDraftNotes: (notes: string) => void
+  clearDraft: () => void
   selectRoomTemplate: (roomId?: string) => void
   updateRoomTemplate: (roomId: string, patch: Partial<MapProject['roomTemplates'][number]>) => void
   toggleRoomConnector: (roomId: string, side: ConnectorSide) => void
-  placeSelectedRoom: (x: number, y: number) => void
-  selectPlacement: (placementId?: string) => void
-  updatePlacement: (placementId: string, patch: Partial<MapProject['placements'][number]>) => void
-  removePlacement: (placementId: string) => void
-  addWarpOverride: (placementId: string, direction: ConnectorSide) => void
-  updateWarpOverride: (placementId: string, warpId: string, patch: Partial<WarpDefinition>) => void
-  removeWarpOverride: (placementId: string, warpId: string) => void
-  updateGeneratorRules: (patch: Partial<MapProject['generatorRules']>) => void
-  generateCandidates: () => void
-  applyCandidate: (index: number) => void
-  runValidation: () => void
   buildExport: () => void
+  clearExport: () => void
+  runValidation: () => void
   setZoom: (zoom: number) => void
   nudgePan: (deltaX: number, deltaY: number) => void
 }
 
+function nextRotation(rotation: DraftPiece['rotation']): DraftPiece['rotation'] {
+  const order: DraftPiece['rotation'][] = [0, 90, 180, 270]
+  const index = order.indexOf(rotation)
+  return order[(index + 1) % order.length]
+}
+
 function nextProject(project: MapProject, sourceBundle?: SourceBundle): MapProject {
+  const normalized = normalizeProject(project, sourceBundle)
+  const placements = draftPlacementsFromProject(normalized)
+  const exportCandidate = projectForPd2Export({ ...normalized, placements }, sourceBundle)
+  const validationTarget = exportCandidate ?? { ...normalized, placements }
+
   return {
-    ...project,
-    validation: validateWorkspace(sourceBundle, project),
+    ...normalized,
+    placements,
+    validation: validateWorkspace(sourceBundle, validationTarget),
     lastEditedAt: new Date().toISOString(),
   }
+}
+
+function nearestFreeCell(project: MapProject, x: number, y: number): { x: number; y: number } {
+  const candidates = [
+    { x: x + 1, y },
+    { x: x - 1, y },
+    { x, y: y + 1 },
+    { x, y: y - 1 },
+    { x: x + 1, y: y + 1 },
+    { x: x - 1, y: y - 1 },
+  ]
+  return candidates.find((candidate) => !findPieceAt(project.draft.pieces, candidate.x, candidate.y)) ?? { x: x + 1, y }
 }
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -90,12 +122,9 @@ export const useAppStore = create<AppState>((set, get) => {
     set({
       sourceBundle,
       project: normalized,
-      generatorCandidates: [],
-      activeCandidateIndex: 0,
-      selectedRoomTemplateId: normalized.roomTemplates[0]?.id,
-      selectedPlacementId: undefined,
+      selectedAdvancedRoomTemplateId: normalized.roomTemplates[0]?.id,
       exportBundle: undefined,
-      importStatus: 'ready',
+      importStatus: sourceBundle ? 'ready' : 'idle',
       importError: undefined,
     })
     void persist(normalized, sourceBundle)
@@ -104,10 +133,6 @@ export const useAppStore = create<AppState>((set, get) => {
   return {
     sourceBundle: undefined,
     project: createEmptyProject(),
-    generatorCandidates: [],
-    activeCandidateIndex: 0,
-    selectedRoomTemplateId: undefined,
-    selectedPlacementId: undefined,
     exportBundle: undefined,
     importStatus: 'idle',
     importError: undefined,
@@ -115,6 +140,7 @@ export const useAppStore = create<AppState>((set, get) => {
     lastSavedAt: undefined,
     zoom: 1,
     pan: { x: 0, y: 0 },
+    selectedAdvancedRoomTemplateId: undefined,
 
     async hydrateFromIndexedDb() {
       if (get().hydrated) {
@@ -122,10 +148,11 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       const workspace = await loadWorkspace('latest')
       if (workspace) {
+        const project = nextProject(workspace.project, workspace.sourceBundle)
         set({
           sourceBundle: workspace.sourceBundle,
-          project: nextProject(workspace.project, workspace.sourceBundle),
-          selectedRoomTemplateId: workspace.project.roomTemplates[0]?.id,
+          project,
+          selectedAdvancedRoomTemplateId: project.roomTemplates[0]?.id,
           lastSavedAt: workspace.updatedAt,
           importStatus: workspace.sourceBundle ? 'ready' : 'idle',
         })
@@ -152,6 +179,30 @@ export const useAppStore = create<AppState>((set, get) => {
       replaceWorkspace(project, sourceBundle)
     },
 
+    startQuickStart() {
+      const sourceBundle = get().sourceBundle
+      const baseProject = sourceBundle ? createProjectFromSourceBundle(sourceBundle) : createEmptyProject()
+      replaceWorkspace(
+        {
+          ...baseProject,
+          meta: {
+            ...baseProject.meta,
+            name: sourceBundle ? baseProject.meta.name : 'New Map Draft',
+            description: 'Plan your map visually with starter rooms and corridors first.',
+          },
+          draft: {
+            ...baseProject.draft,
+            mode: 'quick-start',
+            selectedPieceTemplateId: STARTER_PIECE_TEMPLATES[0].id,
+            selectedPieceId: undefined,
+            pieces: [],
+            notes: '',
+          },
+        },
+        sourceBundle,
+      )
+    },
+
     updateMeta(patch) {
       commitProject({
         ...get().project,
@@ -162,8 +213,176 @@ export const useAppStore = create<AppState>((set, get) => {
       })
     },
 
+    selectTheme(themeId) {
+      const theme = getThemePreset(themeId)
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          selectedThemeId: themeId,
+        },
+        meta: {
+          ...get().project.meta,
+          theme: theme?.name ?? get().project.meta.theme,
+          exportName: get().project.meta.exportName || theme?.id || get().project.meta.exportName,
+        },
+      })
+    },
+
+    selectPieceTemplate(templateId) {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          selectedPieceTemplateId: templateId,
+        },
+      })
+    },
+
+    selectDraftPiece(pieceId) {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          selectedPieceId: pieceId,
+        },
+      })
+    },
+
+    placePiece(x, y) {
+      const project = get().project
+      const templates = getAvailablePieceTemplates(project.roomTemplates)
+      const selectedTemplate = findPieceTemplate(templates, project.draft.selectedPieceTemplateId)
+      if (!selectedTemplate) {
+        return
+      }
+
+      const rotation = findBestRotationForPlacement(selectedTemplate, x, y, project.draft.pieces, templates)
+      const pieces = project.draft.pieces.filter((piece) => !(piece.x === x && piece.y === y))
+      const newPiece = createDraftPiece(selectedTemplate, x, y, rotation)
+      pieces.push(newPiece)
+
+      commitProject({
+        ...project,
+        draft: {
+          ...project.draft,
+          pieces,
+          selectedPieceId: newPiece.id,
+        },
+      })
+    },
+
+    movePiece(pieceId, x, y) {
+      const project = get().project
+      const piece = project.draft.pieces.find((item) => item.id === pieceId)
+      if (!piece) {
+        return
+      }
+      const occupied = project.draft.pieces.find((item) => item.id !== pieceId && item.x === x && item.y === y)
+      if (occupied) {
+        return
+      }
+
+      commitProject({
+        ...project,
+        draft: {
+          ...project.draft,
+          pieces: project.draft.pieces.map((item) => (item.id === pieceId ? { ...item, x, y } : item)),
+          selectedPieceId: pieceId,
+        },
+      })
+    },
+
+    rotateDraftPiece(pieceId) {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          pieces: get().project.draft.pieces.map((piece) =>
+            piece.id === pieceId ? { ...piece, rotation: nextRotation(piece.rotation) } : piece,
+          ),
+        },
+      })
+    },
+
+    duplicateDraftPiece(pieceId) {
+      const project = get().project
+      const piece = project.draft.pieces.find((item) => item.id === pieceId)
+      if (!piece) {
+        return
+      }
+
+      const templates = getAvailablePieceTemplates(project.roomTemplates)
+      const template = findPieceTemplate(templates, piece.templateId)
+      if (!template) {
+        return
+      }
+
+      const nextCell = nearestFreeCell(project, piece.x, piece.y)
+      const duplicate = createDraftPiece(template, nextCell.x, nextCell.y, piece.rotation)
+      duplicate.label = piece.label
+      duplicate.notes = piece.notes
+      duplicate.name = `${piece.name} Copy`
+
+      commitProject({
+        ...project,
+        draft: {
+          ...project.draft,
+          pieces: [...project.draft.pieces, duplicate],
+          selectedPieceId: duplicate.id,
+        },
+      })
+    },
+
+    deleteDraftPiece(pieceId) {
+      const project = get().project
+      commitProject({
+        ...project,
+        draft: {
+          ...project.draft,
+          pieces: project.draft.pieces.filter((piece) => piece.id !== pieceId),
+          selectedPieceId: project.draft.selectedPieceId === pieceId ? undefined : project.draft.selectedPieceId,
+        },
+      })
+    },
+
+    updateDraftPiece(pieceId, patch) {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          pieces: get().project.draft.pieces.map((piece) =>
+            piece.id === pieceId ? { ...piece, ...patch, id: piece.id, templateId: piece.templateId } : piece,
+          ),
+        },
+      })
+    },
+
+    updateDraftNotes(notes) {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          notes,
+        },
+      })
+    },
+
+    clearDraft() {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          pieces: [],
+          selectedPieceId: undefined,
+          selectedPieceTemplateId: STARTER_PIECE_TEMPLATES[0].id,
+          notes: '',
+        },
+      })
+    },
+
     selectRoomTemplate(roomId) {
-      set({ selectedRoomTemplateId: roomId })
+      set({ selectedAdvancedRoomTemplateId: roomId })
     },
 
     updateRoomTemplate(roomId, patch) {
@@ -174,9 +393,7 @@ export const useAppStore = create<AppState>((set, get) => {
             ? {
                 ...room,
                 ...patch,
-                connectorSides: patch.connectorSides
-                  ? normalizeConnectorSides(patch.connectorSides)
-                  : room.connectorSides,
+                connectorSides: patch.connectorSides ? normalizeConnectorSides(patch.connectorSides) : room.connectorSides,
               }
             : room,
         ),
@@ -194,144 +411,24 @@ export const useAppStore = create<AppState>((set, get) => {
       get().updateRoomTemplate(roomId, { connectorSides: nextSides })
     },
 
-    placeSelectedRoom(x, y) {
-      const roomId = get().selectedRoomTemplateId
-      if (!roomId) {
+    buildExport() {
+      const exportProject = projectForPd2Export(get().project, get().sourceBundle)
+      if (!exportProject) {
+        set({ exportBundle: undefined })
         return
       }
-      const nextPlacements = get().project.placements.filter((placement) => !(placement.x === x && placement.y === y && !placement.locked))
-      nextPlacements.push({
-        placementId: `placement-${roomId}-${x}-${y}-${Date.now().toString(36)}`,
-        roomTemplateId: roomId,
-        x,
-        y,
-        rotation: 0,
-        locked: false,
-        warpOverrides: [],
-      })
-      commitProject({
-        ...get().project,
-        placements: nextPlacements,
-      })
+
+      const exportBundle = buildExportBundle(exportProject, get().sourceBundle)
+      set({ exportBundle })
+      void persist(get().project, get().sourceBundle)
     },
 
-    selectPlacement(placementId) {
-      set({ selectedPlacementId: placementId })
-    },
-
-    updatePlacement(placementId, patch) {
-      commitProject({
-        ...get().project,
-        placements: get().project.placements.map((placement) =>
-          placement.placementId === placementId ? { ...placement, ...patch } : placement,
-        ),
-      })
-    },
-
-    removePlacement(placementId) {
-      commitProject({
-        ...get().project,
-        placements: get().project.placements.filter((placement) => placement.placementId !== placementId),
-      })
-      if (get().selectedPlacementId === placementId) {
-        set({ selectedPlacementId: undefined })
-      }
-    },
-
-    addWarpOverride(placementId, direction) {
-      commitProject({
-        ...get().project,
-        placements: get().project.placements.map((placement) =>
-          placement.placementId === placementId
-            ? {
-                ...placement,
-                warpOverrides: [...placement.warpOverrides, createWarp(direction)],
-              }
-            : placement,
-        ),
-      })
-    },
-
-    updateWarpOverride(placementId, warpId, patch) {
-      commitProject({
-        ...get().project,
-        placements: get().project.placements.map((placement) =>
-          placement.placementId === placementId
-            ? {
-                ...placement,
-                warpOverrides: placement.warpOverrides.map((warp) =>
-                  warp.id === warpId ? { ...warp, ...patch } : warp,
-                ),
-              }
-            : placement,
-        ),
-      })
-    },
-
-    removeWarpOverride(placementId, warpId) {
-      commitProject({
-        ...get().project,
-        placements: get().project.placements.map((placement) =>
-          placement.placementId === placementId
-            ? {
-                ...placement,
-                warpOverrides: placement.warpOverrides.filter((warp) => warp.id !== warpId),
-              }
-            : placement,
-        ),
-      })
-    },
-
-    updateGeneratorRules(patch) {
-      commitProject({
-        ...get().project,
-        generatorRules: {
-          ...get().project.generatorRules,
-          ...patch,
-          roomCount: {
-            ...get().project.generatorRules.roomCount,
-            ...(patch.roomCount ?? {}),
-          },
-          sizeTarget: {
-            ...get().project.generatorRules.sizeTarget,
-            ...(patch.sizeTarget ?? {}),
-          },
-          connectorRules: {
-            ...get().project.generatorRules.connectorRules,
-            ...(patch.connectorRules ?? {}),
-          },
-        },
-      })
-    },
-
-    generateCandidates() {
-      const generatorCandidates = generateLayoutCandidates(get().project)
-      set({
-        generatorCandidates,
-        activeCandidateIndex: 0,
-      })
-    },
-
-    applyCandidate(index) {
-      const candidate = get().generatorCandidates[index]
-      if (!candidate) {
-        return
-      }
-      commitProject({
-        ...get().project,
-        placements: candidate.placements,
-      })
-      set({ activeCandidateIndex: index })
+    clearExport() {
+      set({ exportBundle: undefined })
     },
 
     runValidation() {
       commitProject({ ...get().project })
-    },
-
-    buildExport() {
-      const exportBundle = buildExportBundle(get().project, get().sourceBundle)
-      set({ exportBundle })
-      void persist(get().project, get().sourceBundle)
     },
 
     setZoom(zoom) {

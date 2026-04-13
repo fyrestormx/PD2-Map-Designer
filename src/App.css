@@ -76,10 +76,27 @@
 }
 
 .nav-item strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-weight: 600;
 }
 
 .nav-item span {
+  font-size: 0.82rem;
+}
+
+.step-chip,
+.path-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: rgba(255, 155, 71, 0.1);
+  color: var(--accent);
   font-size: 0.82rem;
 }
 
@@ -185,6 +202,99 @@
 
 .panel.compact {
   padding: 14px;
+}
+
+.home-grid,
+.review-grid,
+.advanced-grid,
+.theme-grid,
+.build-layout {
+  display: grid;
+  gap: 20px;
+}
+
+.home-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.review-grid {
+  grid-template-columns: 1.05fr 0.95fr;
+}
+
+.advanced-grid {
+  grid-template-columns: 0.9fr 1.1fr;
+}
+
+.theme-grid {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.build-layout {
+  grid-template-columns: 320px minmax(0, 1fr) 320px;
+}
+
+.path-card,
+.theme-card,
+.callout {
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.path-card {
+  padding: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 155, 71, 0.09), rgba(14, 11, 11, 0.88)),
+    rgba(18, 14, 14, 0.9);
+}
+
+.path-card h2 {
+  margin: 14px 0 8px;
+}
+
+.theme-card {
+  padding: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.theme-card:hover,
+.theme-card.active {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+}
+
+.theme-preview {
+  display: inline-flex;
+  margin-bottom: 16px;
+  min-height: 52px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.theme-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.theme-swatches {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.theme-swatches span {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 .panel h2,
@@ -450,6 +560,13 @@
   border-color: rgba(255, 123, 110, 0.25);
 }
 
+.piece-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .composer-layout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 320px;
@@ -488,6 +605,12 @@
   transform-origin: top left;
 }
 
+.beginner-canvas {
+  grid-template-columns: repeat(14, 86px);
+  grid-template-rows: repeat(10, 86px);
+  background-size: 94px 94px;
+}
+
 .canvas-cell {
   position: relative;
   border-radius: 12px;
@@ -498,6 +621,10 @@
 
 .canvas-cell:hover {
   border-color: rgba(255, 155, 71, 0.45);
+}
+
+.build-cell {
+  overflow: visible;
 }
 
 .placed-room {
@@ -561,6 +688,70 @@
   box-shadow: 0 0 0 4px rgba(255, 200, 87, 0.12);
 }
 
+.connector-dot.success {
+  background: var(--success);
+}
+
+.connector-dot.danger {
+  background: var(--danger);
+}
+
+.draft-piece {
+  position: absolute;
+  inset: 8px;
+  border-radius: 14px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  cursor: grab;
+}
+
+.draft-piece.selected {
+  outline: 2px solid var(--accent);
+}
+
+.draft-piece-kind {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 0.92rem;
+}
+
+.draft-piece-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.palette-section + .palette-section {
+  margin-top: 18px;
+}
+
+.palette-section h3,
+.checklist-group h3 {
+  margin: 0 0 12px;
+  font-family: 'Chakra Petch', sans-serif;
+}
+
+.callout {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.callout.success {
+  border-color: rgba(113, 210, 135, 0.3);
+  background: rgba(113, 210, 135, 0.08);
+}
+
+.callout.warning {
+  border-color: rgba(255, 200, 87, 0.28);
+  background: rgba(255, 200, 87, 0.07);
+}
+
+.checklist {
+  display: grid;
+  gap: 16px;
+}
+
 .preview-block {
   width: 100%;
   min-height: 220px;
@@ -606,7 +797,11 @@
 
   .two-column,
   .three-column,
-  .composer-layout {
+  .composer-layout,
+  .home-grid,
+  .review-grid,
+  .advanced-grid,
+  .build-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -623,5 +818,10 @@
   .canvas-grid {
     grid-template-columns: repeat(12, 74px);
     grid-template-rows: repeat(12, 74px);
+  }
+
+  .beginner-canvas {
+    grid-template-columns: repeat(14, 72px);
+    grid-template-rows: repeat(10, 72px);
   }
 }

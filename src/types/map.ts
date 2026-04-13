@@ -2,6 +2,16 @@ export type ConnectorSide = 'north' | 'east' | 'south' | 'west'
 export type IssueSeverity = 'error' | 'warning' | 'info'
 export type ImportOrigin = 'folder' | 'zip' | 'demo'
 export type RoomSource = 'imported' | 'generated' | 'demo'
+export type Rotation = 0 | 90 | 180 | 270
+export type MapPieceKind =
+  | 'room'
+  | 'corridor-straight'
+  | 'corridor-corner'
+  | 'junction-t'
+  | 'junction-cross'
+  | 'entrance'
+  | 'exit'
+  | 'boss-room'
 
 export type TableRow = Record<string, string>
 
@@ -82,6 +92,69 @@ export interface MapProjectMeta {
   exportName: string
 }
 
+export interface ThemePreset {
+  id: string
+  name: string
+  description: string
+  mood: string
+  preview: string
+  palette: {
+    panel: string
+    ink: string
+    accent: string
+    grid: string
+  }
+  keywords: string[]
+  levelTypeKeywords: string[]
+}
+
+export interface MapPieceTemplate {
+  id: string
+  kind: MapPieceKind
+  name: string
+  description: string
+  baseConnectors: ConnectorSide[]
+  source: 'starter' | 'imported'
+  importedRoomId?: string
+  accent: string
+}
+
+export interface DraftPiece {
+  id: string
+  templateId: string
+  kind: MapPieceKind
+  name: string
+  x: number
+  y: number
+  rotation: Rotation
+  notes: string
+  label: string
+  source: 'starter' | 'imported'
+  importedRoomId?: string
+}
+
+export interface MapDraft {
+  mode: 'quick-start' | 'advanced-import'
+  selectedThemeId?: string
+  selectedPieceTemplateId?: string
+  selectedPieceId?: string
+  pieces: DraftPiece[]
+  notes: string
+}
+
+export interface BindingState {
+  hasImportedData: boolean
+  themeBound: boolean
+  levelTypeId?: string
+  levelTypeName?: string
+  blockers: string[]
+  warnings: string[]
+  openConnectorCount: number
+  importedPieceCount: number
+  starterPieceCount: number
+  canExportToPd2: boolean
+}
+
 export interface GeneratorRuleSet {
   seed: string
   themeFilters: string[]
@@ -107,7 +180,7 @@ export interface PlacedRoom {
   roomTemplateId: string
   x: number
   y: number
-  rotation: 0 | 90 | 180 | 270
+  rotation: Rotation
   locked: boolean
   warpOverrides: WarpDefinition[]
 }
@@ -142,6 +215,7 @@ export interface SourceBundle {
 
 export interface MapProject {
   meta: MapProjectMeta
+  draft: MapDraft
   roomTemplates: RoomTemplate[]
   placements: PlacedRoom[]
   generatorRules: GeneratorRuleSet

@@ -1,7 +1,9 @@
 import { CONNECTOR_SIDES } from './constants'
+import { createDraftPiece, getAvailablePieceTemplates, suggestThemePresetId } from './draft'
 import { getFieldValue } from './tsv'
 import type {
   ConnectorSide,
+  DraftPiece,
   GeneratorRuleSet,
   MapProject,
   RoomTemplate,
@@ -185,6 +187,17 @@ function buildRooms(bundle: SourceBundle, levelTypeId: string): RoomTemplate[] {
   return rooms
 }
 
+function emptyDraft(mode: 'quick-start' | 'advanced-import' = 'quick-start') {
+  return {
+    mode,
+    selectedThemeId: undefined,
+    selectedPieceTemplateId: undefined,
+    selectedPieceId: undefined,
+    pieces: [] as DraftPiece[],
+    notes: '',
+  }
+}
+
 export function createEmptyProject(): MapProject {
   return {
     meta: {
@@ -197,6 +210,7 @@ export function createEmptyProject(): MapProject {
       version: '0.1.0',
       exportName: 'pd2-map-export',
     },
+    draft: emptyDraft(),
     roomTemplates: [],
     placements: [],
     generatorRules: buildDefaultRules([], '', 'pd2-map-export'),
@@ -219,6 +233,7 @@ export function createProjectFromSourceBundle(bundle: SourceBundle): MapProject 
   const name = getFieldValue(firstLevel ?? {}, ['Name', 'LevelName']) || 'Imported PD2 Map'
   const exportName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'pd2-map-export'
   const roomTemplates = buildRooms(bundle, levelTypeId)
+  const selectedThemeId = suggestThemePresetId(`${theme} ${name}`)
 
   return {
     ...empty,
@@ -231,6 +246,11 @@ export function createProjectFromSourceBundle(bundle: SourceBundle): MapProject 
       author: '',
       version: '0.1.0',
       exportName,
+    },
+    draft: {
+      ...emptyDraft('advanced-import'),
+      selectedThemeId,
+      selectedPieceTemplateId: roomTemplates[0] ? `imported-${roomTemplates[0].id}` : undefined,
     },
     roomTemplates,
     generatorRules: buildDefaultRules(roomTemplates, theme, exportName),
@@ -263,4 +283,64 @@ export function getOppositeSide(side: ConnectorSide): ConnectorSide {
 
 export function normalizeConnectorSides(sides: ConnectorSide[]): ConnectorSide[] {
   return CONNECTOR_SIDES.filter((side) => sides.includes(side))
+}
+
+export function normalizeProject(project: Partial<MapProject> | undefined, sourceBundle?: SourceBundle): MapProject {
+  const fallback = sourceBundle ? createProjectFromSourceBundle(sourceBundle) : createEmptyProject()
+  if (!project) {
+    return fallback
+  }
+
+  const roomTemplates = project.roomTemplates ?? fallback.roomTemplates
+  const placements = project.placements ?? fallback.placements
+  const templates = getAvailablePieceTemplates(roomTemplates)
+  const draftPieces =
+    project.draft?.pieces ??
+    placements
+      .map((placement) => {
+        const room = roomTemplates.find((item) => item.id === placement.roomTemplateId)
+        const template = room ? templates.find((item) => item.importedRoomId === room.id) : undefined
+        return template ? createDraftPiece(template, placement.x, placement.y, placement.rotation) : undefined
+      })
+      .filter((piece): piece is DraftPiece => Boolean(piece))
+
+  return {
+    ...fallback,
+    ...project,
+    meta: {
+      ...fallback.meta,
+      ...(project.meta ?? {}),
+    },
+    draft: {
+      ...emptyDraft(sourceBundle ? 'advanced-import' : 'quick-start'),
+      ...(project.draft ?? {}),
+      selectedThemeId:
+        project.draft?.selectedThemeId ??
+        suggestThemePresetId(`${project.meta?.theme ?? ''} ${project.meta?.name ?? ''}`),
+      selectedPieceTemplateId:
+        project.draft?.selectedPieceTemplateId ??
+        (roomTemplates[0] ? `imported-${roomTemplates[0].id}` : fallback.draft.selectedPieceTemplateId),
+      pieces: draftPieces,
+    },
+    roomTemplates,
+    placements,
+    generatorRules: {
+      ...fallback.generatorRules,
+      ...(project.generatorRules ?? {}),
+      roomCount: {
+        ...fallback.generatorRules.roomCount,
+        ...(project.generatorRules?.roomCount ?? {}),
+      },
+      sizeTarget: {
+        ...fallback.generatorRules.sizeTarget,
+        ...(project.generatorRules?.sizeTarget ?? {}),
+      },
+      connectorRules: {
+        ...fallback.generatorRules.connectorRules,
+        ...(project.generatorRules?.connectorRules ?? {}),
+      },
+    },
+    validation: project.validation ?? fallback.validation,
+    lastEditedAt: project.lastEditedAt ?? fallback.lastEditedAt,
+  }
 }
