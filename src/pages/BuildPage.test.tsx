@@ -10,6 +10,10 @@ function resetStore() {
   useAppStore.setState({
     sourceBundle: undefined,
     project: createEmptyProject(),
+    preferences: {
+      guidedMode: true,
+      setupComplete: false,
+    },
     exportBundle: undefined,
     importStatus: 'idle',
     importError: undefined,

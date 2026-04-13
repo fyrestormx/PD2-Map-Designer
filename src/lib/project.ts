@@ -1,5 +1,6 @@
 import { CONNECTOR_SIDES } from './constants'
 import { createDraftPiece, getAvailablePieceTemplates, suggestThemePresetId } from './draft'
+import { resolveLevelTypeId } from './levelTypes'
 import { getFieldValue } from './tsv'
 import type {
   ConnectorSide,
@@ -191,6 +192,7 @@ function emptyDraft(mode: 'quick-start' | 'advanced-import' = 'quick-start') {
   return {
     mode,
     selectedThemeId: undefined,
+    selectedImportedLevelTypeId: undefined,
     selectedPieceTemplateId: undefined,
     selectedPieceId: undefined,
     pieces: [] as DraftPiece[],
@@ -211,6 +213,7 @@ export function createEmptyProject(): MapProject {
       exportName: 'pd2-map-export',
     },
     draft: emptyDraft(),
+    variants: [],
     roomTemplates: [],
     placements: [],
     generatorRules: buildDefaultRules([], '', 'pd2-map-export'),
@@ -225,9 +228,10 @@ export function createProjectFromSourceBundle(bundle: SourceBundle): MapProject 
   const lvlTypes = bundle.tables['LvlTypes.txt']
   const firstLevel = levels?.rows[0]
   const firstLevelType = lvlTypes?.rows[0]
+  const firstLevelTypeIndex = firstLevelType ? lvlTypes!.rows.indexOf(firstLevelType) : 0
   const levelTypeId =
     getFieldValue(firstLevel ?? {}, ['LevelType', 'LvlType', 'Type']) ||
-    getFieldValue(firstLevelType ?? {}, ['ID', 'Id']) ||
+    (firstLevelType ? resolveLevelTypeId(firstLevelType, firstLevelTypeIndex) : '') ||
     ''
   const theme = getFieldValue(firstLevelType ?? {}, ['Name']) || 'Imported theme'
   const name = getFieldValue(firstLevel ?? {}, ['Name', 'LevelName']) || 'Imported PD2 Map'
@@ -250,8 +254,10 @@ export function createProjectFromSourceBundle(bundle: SourceBundle): MapProject 
     draft: {
       ...emptyDraft('advanced-import'),
       selectedThemeId,
+      selectedImportedLevelTypeId: levelTypeId || undefined,
       selectedPieceTemplateId: roomTemplates[0] ? `imported-${roomTemplates[0].id}` : undefined,
     },
+    variants: [],
     roomTemplates,
     generatorRules: buildDefaultRules(roomTemplates, theme, exportName),
     lastEditedAt: new Date().toISOString(),
@@ -317,11 +323,16 @@ export function normalizeProject(project: Partial<MapProject> | undefined, sourc
       selectedThemeId:
         project.draft?.selectedThemeId ??
         suggestThemePresetId(`${project.meta?.theme ?? ''} ${project.meta?.name ?? ''}`),
+      selectedImportedLevelTypeId:
+        project.draft?.selectedImportedLevelTypeId ??
+        project.meta?.levelTypeId ??
+        fallback.draft.selectedImportedLevelTypeId,
       selectedPieceTemplateId:
         project.draft?.selectedPieceTemplateId ??
         (roomTemplates[0] ? `imported-${roomTemplates[0].id}` : fallback.draft.selectedPieceTemplateId),
       pieces: draftPieces,
     },
+    variants: project.variants ?? fallback.variants,
     roomTemplates,
     placements,
     generatorRules: {

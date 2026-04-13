@@ -136,10 +136,18 @@ export interface DraftPiece {
 export interface MapDraft {
   mode: 'quick-start' | 'advanced-import'
   selectedThemeId?: string
+  selectedImportedLevelTypeId?: string
   selectedPieceTemplateId?: string
   selectedPieceId?: string
   pieces: DraftPiece[]
   notes: string
+}
+
+export interface MapVariant {
+  id: string
+  name: string
+  savedAt: string
+  draft: MapDraft
 }
 
 export interface BindingState {
@@ -216,6 +224,7 @@ export interface SourceBundle {
 export interface MapProject {
   meta: MapProjectMeta
   draft: MapDraft
+  variants: MapVariant[]
   roomTemplates: RoomTemplate[]
   placements: PlacedRoom[]
   generatorRules: GeneratorRuleSet
@@ -223,10 +232,16 @@ export interface MapProject {
   lastEditedAt: string
 }
 
+export interface UserPreferences {
+  guidedMode: boolean
+  setupComplete: boolean
+}
+
 export interface PersistedWorkspace {
   id: string
   sourceBundle?: SourceBundle
   project: MapProject
+  preferences?: UserPreferences
   updatedAt: string
 }
 

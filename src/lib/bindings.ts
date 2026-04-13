@@ -1,4 +1,5 @@
 import { getFieldValue } from './tsv'
+import { findImportedLevelTypeOption, getImportedLevelTypeOptions, resolveLevelTypeId } from './levelTypes'
 import { getAvailablePieceTemplates, getDraftConnectorStates, getThemePreset, slugify } from './draft'
 import type { BindingState, MapProject, PlacedRoom, SourceBundle } from '../types/map'
 
@@ -7,8 +8,24 @@ interface LevelTypeMatch {
   levelTypeName?: string
 }
 
-function findBestLevelTypeMatch(sourceBundle: SourceBundle | undefined, themeId?: string): LevelTypeMatch {
-  if (!sourceBundle || !themeId) {
+function findBestLevelTypeMatch(
+  sourceBundle: SourceBundle | undefined,
+  themeId?: string,
+  selectedImportedLevelTypeId?: string,
+): LevelTypeMatch {
+  if (!sourceBundle) {
+    return {}
+  }
+
+  const explicitMatch = findImportedLevelTypeOption(sourceBundle, selectedImportedLevelTypeId)
+  if (explicitMatch) {
+    return {
+      levelTypeId: explicitMatch.id,
+      levelTypeName: explicitMatch.name,
+    }
+  }
+
+  if (!themeId) {
     return {}
   }
 
@@ -19,10 +36,10 @@ function findBestLevelTypeMatch(sourceBundle: SourceBundle | undefined, themeId?
   }
 
   const ranked = lvlTypes.rows
-    .map((row) => {
+    .map((row, index) => {
       const haystack = `${getFieldValue(row, ['Name'])} ${Object.values(row).join(' ')}`.toLowerCase()
       const score = theme.levelTypeKeywords.filter((keyword) => haystack.includes(keyword)).length
-      return { row, score }
+      return { row, score, index }
     })
     .sort((left, right) => right.score - left.score)
 
@@ -32,7 +49,7 @@ function findBestLevelTypeMatch(sourceBundle: SourceBundle | undefined, themeId?
   }
 
   return {
-    levelTypeId: getFieldValue(best.row, ['ID', 'Id']),
+    levelTypeId: resolveLevelTypeId(best.row, best.index),
     levelTypeName: getFieldValue(best.row, ['Name']),
   }
 }
@@ -69,7 +86,11 @@ export function getBindingState(project: MapProject, sourceBundle?: SourceBundle
   const starterPieceCount = project.draft.pieces.filter((piece) => piece.source === 'starter').length
   const blockers: string[] = []
   const warnings: string[] = []
-  const levelTypeMatch = findBestLevelTypeMatch(sourceBundle, project.draft.selectedThemeId)
+  const levelTypeMatch = findBestLevelTypeMatch(
+    sourceBundle,
+    project.draft.selectedThemeId,
+    project.draft.selectedImportedLevelTypeId,
+  )
 
   if (!project.draft.selectedThemeId) {
     blockers.push('Choose a theme first.')
@@ -85,6 +106,10 @@ export function getBindingState(project: MapProject, sourceBundle?: SourceBundle
 
   if (sourceBundle && !levelTypeMatch.levelTypeId) {
     blockers.push('The chosen theme does not match any imported LevelType yet.')
+  }
+
+  if (sourceBundle && getImportedLevelTypeOptions(sourceBundle).length > 0 && !project.draft.selectedImportedLevelTypeId) {
+    warnings.push('Pick one local tileset in Theme if you want exact control over map graphics.')
   }
 
   if (starterPieceCount > 0) {

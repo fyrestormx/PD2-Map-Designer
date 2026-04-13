@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test'
 test('quick start flow reaches review with a placed room', async ({ page }) => {
   await page.goto('/')
 
-  await expect(page.getByRole('heading', { name: /make a map without fighting the data files/i })).toBeVisible()
-  await page.getByRole('button', { name: /start blank map/i }).click()
+  await expect(page.getByRole('heading', { name: /start here/i })).toBeVisible()
+  await page.getByRole('button', { name: /i only want to sketch a map/i }).click()
 
   await expect(page.getByRole('heading', { name: /choose the look and feel/i })).toBeVisible()
   await page.getByRole('button', { name: /hell wastes/i }).click()

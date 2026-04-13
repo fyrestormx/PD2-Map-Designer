@@ -5,10 +5,11 @@ import { countDraftKinds, getDraftConnectorStates, getGridBounds, getThemePreset
 import { useAppStore } from '../store/useAppStore'
 
 export function ReviewPage() {
-  const { sourceBundle, project } = useAppStore(
+  const { sourceBundle, project, preferences } = useAppStore(
     useShallow((state) => ({
       sourceBundle: state.sourceBundle,
       project: state.project,
+      preferences: state.preferences,
     })),
   )
 
@@ -28,6 +29,13 @@ export function ReviewPage() {
           should be obvious here.
         </p>
       </section>
+
+      {preferences.guidedMode ? (
+        <section className="callout success">
+          <strong>Do this now</strong>
+          <p>Read the blockers first. If something is wrong, go back to Build. If this version looks good, export a review packet so it is easy to share with the PD2 team.</p>
+        </section>
+      ) : null}
 
       <section className="review-grid">
         <div className="panel">
@@ -50,6 +58,10 @@ export function ReviewPage() {
               <strong>
                 {bounds.width} x {bounds.height}
               </strong>
+            </div>
+            <div className="stat-card">
+              <span>Saved variations</span>
+              <strong>{project.variants.length}</strong>
             </div>
           </div>
 

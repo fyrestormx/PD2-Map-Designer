@@ -1,15 +1,17 @@
 import { Link } from 'react-router-dom'
 import { useShallow } from 'zustand/react/shallow'
-import { copyTextToClipboard, downloadExportBundle, downloadTextFile } from '../lib/download'
+import { copyTextToClipboard, downloadExportBundle, downloadTextArchive, downloadTextFile } from '../lib/download'
 import { getBindingState } from '../lib/bindings'
 import { getThemePreset } from '../lib/draft'
+import { buildReviewPacketFiles, buildReviewSummary } from '../lib/reviewPacket'
 import { useAppStore } from '../store/useAppStore'
 
 export function ExportPage() {
-  const { sourceBundle, project, exportBundle, buildExport, clearExport } = useAppStore(
+  const { sourceBundle, project, preferences, exportBundle, buildExport, clearExport } = useAppStore(
     useShallow((state) => ({
       sourceBundle: state.sourceBundle,
       project: state.project,
+      preferences: state.preferences,
       exportBundle: state.exportBundle,
       buildExport: state.buildExport,
       clearExport: state.clearExport,
@@ -19,6 +21,8 @@ export function ExportPage() {
   const bindingState = getBindingState(project, sourceBundle)
   const theme = getThemePreset(project.draft.selectedThemeId)
   const projectJson = JSON.stringify(project, null, 2)
+  const reviewSummary = buildReviewSummary(project, sourceBundle)
+  const reviewPacketFiles = buildReviewPacketFiles(project, sourceBundle, exportBundle)
 
   return (
     <div className="page">
@@ -29,6 +33,13 @@ export function ExportPage() {
           unlocks when the review blockers are clear and imported bindings are present.
         </p>
       </section>
+
+      {preferences.guidedMode ? (
+        <section className="callout success">
+          <strong>Do this now</strong>
+          <p>Download the planner JSON if you just want to keep working. Download the review packet if you want something easy to send to the PD2 team. Build the PD2 export bundle only when the blockers are gone.</p>
+        </section>
+      ) : null}
 
       <div className="two-column">
         <section className="panel">
@@ -88,6 +99,29 @@ export function ExportPage() {
           ) : null}
         </section>
       </div>
+
+      <section className="panel">
+        <h2>Review packet</h2>
+        <p className="muted">
+          This zip is the easy share option. It includes the planner JSON, a plain-English review note, and the raw PD2 export files if they are ready.
+        </p>
+        <div className="button-row">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void downloadTextArchive(reviewPacketFiles, `${project.meta.exportName || 'pd2-map-review'}-packet`)}
+          >
+            Download review packet
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => void copyTextToClipboard(reviewSummary)}
+          >
+            Copy review summary
+          </button>
+        </div>
+      </section>
 
       {exportBundle ? (
         <>

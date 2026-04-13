@@ -28,6 +28,7 @@ export function BuildPage() {
   const {
     sourceBundle,
     project,
+    preferences,
     zoom,
     pan,
     setZoom,
@@ -41,11 +42,15 @@ export function BuildPage() {
     deleteDraftPiece,
     updateDraftPiece,
     updateDraftNotes,
+    saveDraftVariant,
+    loadDraftVariant,
+    deleteDraftVariant,
     clearDraft,
   } = useAppStore(
     useShallow((state) => ({
       sourceBundle: state.sourceBundle,
       project: state.project,
+      preferences: state.preferences,
       zoom: state.zoom,
       pan: state.pan,
       setZoom: state.setZoom,
@@ -59,6 +64,9 @@ export function BuildPage() {
       deleteDraftPiece: state.deleteDraftPiece,
       updateDraftPiece: state.updateDraftPiece,
       updateDraftNotes: state.updateDraftNotes,
+      saveDraftVariant: state.saveDraftVariant,
+      loadDraftVariant: state.loadDraftVariant,
+      deleteDraftVariant: state.deleteDraftVariant,
       clearDraft: state.clearDraft,
     })),
   )
@@ -93,6 +101,13 @@ export function BuildPage() {
           up below the starter shapes when advanced data is loaded.
         </p>
       </section>
+
+      {preferences.guidedMode ? (
+        <section className="callout success">
+          <strong>Do this now</strong>
+          <p>1. Choose a piece on the left. 2. Click the grid to place it. 3. Add an entrance and an exit. 4. Save a variation before trying a different route.</p>
+        </section>
+      ) : null}
 
       <div className="build-layout">
         <section className="panel compact">
@@ -347,6 +362,39 @@ export function BuildPage() {
               Clear canvas
             </button>
           </div>
+
+          <h3>Variations</h3>
+          <p className="muted">Save a copy of this layout before you try a different version.</p>
+
+          <div className="button-row">
+            <button type="button" className="btn-secondary" onClick={saveDraftVariant}>
+              Save current layout as variation
+            </button>
+          </div>
+
+          {project.variants.length ? (
+            <div className="variant-list">
+              {project.variants.map((variant) => (
+                <article key={variant.id} className="room-card">
+                  <div className="room-title">
+                    <strong>{variant.name}</strong>
+                    <span className="tag">{variant.draft.pieces.length} pieces</span>
+                  </div>
+                  <p className="muted">Saved {new Date(variant.savedAt).toLocaleString()}</p>
+                  <div className="button-row">
+                    <button type="button" className="btn-ghost" onClick={() => loadDraftVariant(variant.id)}>
+                      Load
+                    </button>
+                    <button type="button" className="btn-danger" onClick={() => deleteDraftVariant(variant.id)}>
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">No saved variations yet.</div>
+          )}
         </section>
       </div>
 

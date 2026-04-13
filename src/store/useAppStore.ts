@@ -19,9 +19,11 @@ import type {
   ConnectorSide,
   DraftPiece,
   ExportBundle,
+  MapDraft,
   MapProject,
   PersistedWorkspace,
   SourceBundle,
+  UserPreferences,
 } from '../types/map'
 
 type ImportStatus = 'idle' | 'loading' | 'ready' | 'error'
@@ -29,6 +31,7 @@ type ImportStatus = 'idle' | 'loading' | 'ready' | 'error'
 interface AppState {
   sourceBundle?: SourceBundle
   project: MapProject
+  preferences: UserPreferences
   exportBundle?: ExportBundle
   importStatus: ImportStatus
   importError?: string
@@ -41,11 +44,13 @@ interface AppState {
   }
   selectedAdvancedRoomTemplateId?: string
   hydrateFromIndexedDb: () => Promise<void>
+  setGuidedMode: (guidedMode: boolean) => void
   importBrowserFiles: (files: File[]) => Promise<void>
   loadDemoProject: () => void
   startQuickStart: () => void
   updateMeta: (patch: Partial<MapProject['meta']>) => void
   selectTheme: (themeId: string) => void
+  selectImportedLevelType: (levelTypeId?: string) => void
   selectPieceTemplate: (templateId?: string) => void
   selectDraftPiece: (pieceId?: string) => void
   placePiece: (x: number, y: number) => void
@@ -55,6 +60,9 @@ interface AppState {
   deleteDraftPiece: (pieceId: string) => void
   updateDraftPiece: (pieceId: string, patch: Partial<DraftPiece>) => void
   updateDraftNotes: (notes: string) => void
+  saveDraftVariant: () => void
+  loadDraftVariant: (variantId: string) => void
+  deleteDraftVariant: (variantId: string) => void
   clearDraft: () => void
   selectRoomTemplate: (roomId?: string) => void
   updateRoomTemplate: (roomId: string, patch: Partial<MapProject['roomTemplates'][number]>) => void
@@ -98,12 +106,37 @@ function nearestFreeCell(project: MapProject, x: number, y: number): { x: number
   return candidates.find((candidate) => !findPieceAt(project.draft.pieces, candidate.x, candidate.y)) ?? { x: x + 1, y }
 }
 
+const defaultPreferences: UserPreferences = {
+  guidedMode: true,
+  setupComplete: false,
+}
+
+function cloneDraft(draft: MapDraft): MapDraft {
+  return {
+    ...draft,
+    pieces: draft.pieces.map((piece) => ({ ...piece })),
+  }
+}
+
+function nextVariantName(project: MapProject): string {
+  let nextNumber = project.variants.length + 1
+  while (project.variants.some((variant) => variant.name === `Variation ${nextNumber}`)) {
+    nextNumber += 1
+  }
+  return `Variation ${nextNumber}`
+}
+
 export const useAppStore = create<AppState>((set, get) => {
-  const persist = async (project = get().project, sourceBundle = get().sourceBundle) => {
+  const persist = async (
+    project = get().project,
+    sourceBundle = get().sourceBundle,
+    preferences = get().preferences,
+  ) => {
     const snapshot: PersistedWorkspace = {
       id: 'latest',
       sourceBundle,
       project,
+      preferences,
       updatedAt: new Date().toISOString(),
     }
     await saveWorkspace(snapshot)
@@ -114,25 +147,32 @@ export const useAppStore = create<AppState>((set, get) => {
     const sourceBundle = get().sourceBundle
     const normalized = nextProject(project, sourceBundle)
     set({ project: normalized, exportBundle: undefined })
-    void persist(normalized, sourceBundle)
+    void persist(normalized, sourceBundle, get().preferences)
   }
 
-  const replaceWorkspace = (project: MapProject, sourceBundle?: SourceBundle) => {
+  const replaceWorkspace = (
+    project: MapProject,
+    sourceBundle?: SourceBundle,
+    preferencePatch?: Partial<UserPreferences>,
+  ) => {
     const normalized = nextProject(project, sourceBundle)
+    const preferences = { ...get().preferences, ...preferencePatch }
     set({
       sourceBundle,
       project: normalized,
+      preferences,
       selectedAdvancedRoomTemplateId: normalized.roomTemplates[0]?.id,
       exportBundle: undefined,
       importStatus: sourceBundle ? 'ready' : 'idle',
       importError: undefined,
     })
-    void persist(normalized, sourceBundle)
+    void persist(normalized, sourceBundle, preferences)
   }
 
   return {
     sourceBundle: undefined,
     project: createEmptyProject(),
+    preferences: defaultPreferences,
     exportBundle: undefined,
     importStatus: 'idle',
     importError: undefined,
@@ -149,9 +189,17 @@ export const useAppStore = create<AppState>((set, get) => {
       const workspace = await loadWorkspace('latest')
       if (workspace) {
         const project = nextProject(workspace.project, workspace.sourceBundle)
+        const preferences = {
+          ...defaultPreferences,
+          ...(workspace.preferences ?? {}),
+          setupComplete:
+            workspace.preferences?.setupComplete ??
+            Boolean(workspace.sourceBundle || project.draft.selectedThemeId || project.draft.pieces.length),
+        }
         set({
           sourceBundle: workspace.sourceBundle,
           project,
+          preferences,
           selectedAdvancedRoomTemplateId: project.roomTemplates[0]?.id,
           lastSavedAt: workspace.updatedAt,
           importStatus: workspace.sourceBundle ? 'ready' : 'idle',
@@ -160,12 +208,21 @@ export const useAppStore = create<AppState>((set, get) => {
       set({ hydrated: true })
     },
 
+    setGuidedMode(guidedMode) {
+      const preferences = {
+        ...get().preferences,
+        guidedMode,
+      }
+      set({ preferences })
+      void persist(get().project, get().sourceBundle, preferences)
+    },
+
     async importBrowserFiles(files) {
       set({ importStatus: 'loading', importError: undefined })
       try {
         const { files: loadedFiles, origin } = await loadFilesFromSelection(files)
         const { sourceBundle, project } = buildWorkspaceFromLoadedFiles(loadedFiles, origin)
-        replaceWorkspace(project, sourceBundle)
+        replaceWorkspace(project, sourceBundle, { setupComplete: true })
       } catch (error) {
         set({
           importStatus: 'error',
@@ -176,7 +233,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     loadDemoProject() {
       const { sourceBundle, project } = buildWorkspaceFromLoadedFiles(getDemoImportFiles(), 'demo')
-      replaceWorkspace(project, sourceBundle)
+      replaceWorkspace(project, sourceBundle, { setupComplete: true })
     },
 
     startQuickStart() {
@@ -200,6 +257,7 @@ export const useAppStore = create<AppState>((set, get) => {
           },
         },
         sourceBundle,
+        { setupComplete: true },
       )
     },
 
@@ -225,6 +283,20 @@ export const useAppStore = create<AppState>((set, get) => {
           ...get().project.meta,
           theme: theme?.name ?? get().project.meta.theme,
           exportName: get().project.meta.exportName || theme?.id || get().project.meta.exportName,
+        },
+      })
+    },
+
+    selectImportedLevelType(levelTypeId) {
+      commitProject({
+        ...get().project,
+        draft: {
+          ...get().project.draft,
+          selectedImportedLevelTypeId: levelTypeId,
+        },
+        meta: {
+          ...get().project.meta,
+          levelTypeId: levelTypeId ?? '',
         },
       })
     },
@@ -368,6 +440,47 @@ export const useAppStore = create<AppState>((set, get) => {
       })
     },
 
+    saveDraftVariant() {
+      const project = get().project
+      const savedAt = new Date().toISOString()
+      commitProject({
+        ...project,
+        variants: [
+          {
+            id: `variant-${Date.now().toString(36)}`,
+            name: nextVariantName(project),
+            savedAt,
+            draft: cloneDraft(project.draft),
+          },
+          ...project.variants,
+        ],
+      })
+    },
+
+    loadDraftVariant(variantId) {
+      const project = get().project
+      const variant = project.variants.find((item) => item.id === variantId)
+      if (!variant) {
+        return
+      }
+
+      commitProject({
+        ...project,
+        draft: {
+          ...cloneDraft(variant.draft),
+          selectedPieceId: undefined,
+        },
+      })
+    },
+
+    deleteDraftVariant(variantId) {
+      const project = get().project
+      commitProject({
+        ...project,
+        variants: project.variants.filter((variant) => variant.id !== variantId),
+      })
+    },
+
     clearDraft() {
       commitProject({
         ...get().project,
@@ -420,7 +533,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
       const exportBundle = buildExportBundle(exportProject, get().sourceBundle)
       set({ exportBundle })
-      void persist(get().project, get().sourceBundle)
+      void persist(get().project, get().sourceBundle, get().preferences)
     },
 
     clearExport() {

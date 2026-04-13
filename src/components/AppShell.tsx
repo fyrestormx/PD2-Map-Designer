@@ -6,7 +6,7 @@ import { getThemePreset } from '../lib/draft'
 import { useAppStore } from '../store/useAppStore'
 
 const routes = [
-  { to: '/', label: 'Home', hint: 'Pick your starting path' },
+  { to: '/', label: 'Start', hint: 'Local files or blank sketch' },
   { to: '/theme', label: 'Theme', hint: 'Choose map visuals' },
   { to: '/build', label: 'Build', hint: 'Place rooms and corridors' },
   { to: '/review', label: 'Review', hint: 'Check route and blockers' },
@@ -20,15 +20,19 @@ export function AppShell({ children }: PropsWithChildren) {
     hydrateFromIndexedDb,
     hydrated,
     project,
+    preferences,
     sourceBundle,
     lastSavedAt,
+    setGuidedMode,
   } = useAppStore(
     useShallow((state) => ({
       hydrateFromIndexedDb: state.hydrateFromIndexedDb,
       hydrated: state.hydrated,
       project: state.project,
+      preferences: state.preferences,
       sourceBundle: state.sourceBundle,
       lastSavedAt: state.lastSavedAt,
+      setGuidedMode: state.setGuidedMode,
     })),
   )
 
@@ -45,7 +49,16 @@ export function AppShell({ children }: PropsWithChildren) {
         <div className="brand">
           <div className="brand-mark">PD2 Mapper</div>
           <h1>Map Designer</h1>
-          <p>Beginner-first map blockouts with advanced PD2 export bindings when you need them.</p>
+          <p>Guided local map planning first. Real PD2 files and export stay available when you need them.</p>
+          <div className="button-row">
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setGuidedMode(!preferences.guidedMode)}
+            >
+              {preferences.guidedMode ? 'Hide guide' : 'Show guide'}
+            </button>
+          </div>
         </div>
 
         <nav className="nav-list" aria-label="Primary">
@@ -93,9 +106,10 @@ export function AppShell({ children }: PropsWithChildren) {
           <section className="summary-card">
             <h3>Status</h3>
             <div className="plain-list">
-              <div>Page: {location.pathname === '/' ? 'home' : location.pathname.replace('/', '')}</div>
+              <div>Page: {location.pathname === '/' ? 'start' : location.pathname.replace('/', '')}</div>
               <div>Open connectors: {bindingState.openConnectorCount}</div>
               <div>Import loaded: {sourceBundle ? 'yes' : 'no'}</div>
+              <div>Guide: {preferences.guidedMode ? 'on' : 'off'}</div>
               <div>Saved: {lastSavedAt ? new Date(lastSavedAt).toLocaleTimeString() : 'Not yet'}</div>
             </div>
           </section>

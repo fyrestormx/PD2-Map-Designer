@@ -205,6 +205,7 @@
 }
 
 .home-grid,
+.setup-grid,
 .review-grid,
 .advanced-grid,
 .theme-grid,
@@ -215,6 +216,10 @@
 
 .home-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.setup-grid {
+  grid-template-columns: 1.05fr 0.95fr;
 }
 
 .review-grid {
@@ -246,6 +251,23 @@
   background:
     linear-gradient(180deg, rgba(255, 155, 71, 0.09), rgba(14, 11, 11, 0.88)),
     rgba(18, 14, 14, 0.9);
+}
+
+.action-card {
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.action-card:hover,
+.action-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
 }
 
 .path-card h2 {
@@ -567,6 +589,12 @@
   margin-top: 14px;
 }
 
+.guide-card-grid,
+.variant-list {
+  display: grid;
+  gap: 14px;
+}
+
 .composer-layout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 320px;
@@ -799,6 +827,7 @@
   .three-column,
   .composer-layout,
   .home-grid,
+  .setup-grid,
   .review-grid,
   .advanced-grid,
   .build-layout {
